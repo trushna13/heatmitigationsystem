@@ -1,0 +1,122 @@
+{
+  "new_delhi": {
+    "availability_index": 61,
+    "surface_water_pct": 26,
+    "proximity_km": 15,
+    "water_stress_index": 38
+  },
+  "mumbai": {
+    "availability_index": 77,
+    "surface_water_pct": 29,
+    "proximity_km": 12,
+    "water_stress_index": 17
+  },
+  "bengaluru": {
+    "availability_index": 45,
+    "surface_water_pct": 23,
+    "proximity_km": 21,
+    "water_stress_index": 63
+  },
+  "chennai": {
+    "availability_index": 79,
+    "surface_water_pct": 39,
+    "proximity_km": 10,
+    "water_stress_index": 26
+  },
+  "kolkata": {
+    "availability_index": 81,
+    "surface_water_pct": 40,
+    "proximity_km": 6,
+    "water_stress_index": 16
+  },
+  "hyderabad": {
+    "availability_index": 24,
+    "surface_water_pct": 8,
+    "proximity_km": 30,
+    "water_stress_index": 70
+  },
+  "pune": {
+    "availability_index": 53,
+    "surface_water_pct": 24,
+    "proximity_km": 20,
+    "water_stress_index": 45
+  },
+  "ahmedabad": {
+    "availability_index": 19,
+    "surface_water_pct": 10,
+    "proximity_km": 32,
+    "water_stress_index": 86
+  },
+  "jaipur": {
+    "availability_index": 14,
+    "surface_water_pct": 4,
+    "proximity_km": 30,
+    "water_stress_index": 92
+  },
+  "lucknow": {
+    "availability_index": 52,
+    "surface_water_pct": 24,
+    "proximity_km": 19,
+    "water_stress_index": 44
+  },
+  "surat": {
+    "availability_index": 82,
+    "surface_water_pct": 31,
+    "proximity_km": 9,
+    "water_stress_index": 18
+  },
+  "kochi": {
+    "availability_index": 82,
+    "surface_water_pct": 35,
+    "proximity_km": 10,
+    "water_stress_index": 16
+  },
+  "chandigarh": {
+    "availability_index": 60,
+    "surface_water_pct": 27,
+    "proximity_km": 18,
+    "water_stress_index": 37
+  },
+  "nagpur": {
+    "availability_index": 27,
+    "surface_water_pct": 13,
+    "proximity_km": 30,
+    "water_stress_index": 78
+  },
+  "patna": {
+    "availability_index": 47,
+    "surface_water_pct": 26,
+    "proximity_km": 18,
+    "water_stress_index": 50
+  },
+  "bhopal": {
+    "availability_index": 57,
+    "surface_water_pct": 21,
+    "proximity_km": 20,
+    "water_stress_index": 45
+  },
+  "visakhapatnam": {
+    "availability_index": 83,
+    "surface_water_pct": 38,
+    "proximity_km": 7,
+    "water_stress_index": 15
+  },
+  "guwahati": {
+    "availability_index": 46,
+    "surface_water_pct": 27,
+    "proximity_km": 20,
+    "water_stress_index": 46
+  },
+  "vijayawada": {
+    "availability_index": 83,
+    "surface_water_pct": 39,
+    "proximity_km": 7,
+    "water_stress_index": 10
+  },
+  "coimbatore": {
+    "availability_index": 50,
+    "surface_water_pct": 23,
+    "proximity_km": 22,
+    "water_stress_index": 49
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "new_delhi": {
+    "vegetation_health": 54,
+    "green_cover_pct": 32,
+    "ndvi": 0.48,
+    "tree_density_index": 61
+  },
+  "mumbai": {
+    "vegetation_health": 46,
+    "green_cover_pct": 25,
+    "ndvi": 0.43,
+    "tree_density_index": 40
+  },
+  "bengaluru": {
+    "vegetation_health": 76,
+    "green_cover_pct": 42,
+    "ndvi": 0.66,
+    "tree_density_index": 72
+  },
+  "chennai": {
+    "vegetation_health": 54,
+    "green_cover_pct": 25,
+    "ndvi": 0.54,
+    "tree_density_index": 48
+  },
+  "kolkata": {
+    "vegetation_health": 44,
+    "green_cover_pct": 23,
+    "ndvi": 0.44,
+    "tree_density_index": 37
+  },
+  "hyderabad": {
+    "vegetation_health": 18,
+    "green_cover_pct": 7,
+    "ndvi": 0.26,
+    "tree_density_index": 22
+  },
+  "pune": {
+    "vegetation_health": 39,
+    "green_cover_pct": 25,
+    "ndvi": 0.41,
+    "tree_density_index": 39
+  },
+  "ahmedabad": {
+    "vegetation_health": 23,
+    "green_cover_pct": 15,
+    "ndvi": 0.24,
+    "tree_density_index": 28
+  },
+  "jaipur": {
+    "vegetation_health": 22,
+    "green_cover_pct": 9,
+    "ndvi": 0.24,
+    "tree_density_index": 27
+  },
+  "lucknow": {
+    "vegetation_health": 47,
+    "green_cover_pct": 19,
+    "ndvi": 0.45,
+    "tree_density_index": 43
+  },
+  "surat": {
+    "vegetation_health": 53,
+    "green_cover_pct": 30,
+    "ndvi": 0.5,
+    "tree_density_index": 61
+  },
+  "kochi": {
+    "vegetation_health": 83,
+    "green_cover_pct": 39,
+    "ndvi": 0.71,
+    "tree_density_index": 76
+  },
+  "chandigarh": {
+    "vegetation_health": 48,
+    "green_cover_pct": 28,
+    "ndvi": 0.5,
+    "tree_density_index": 47
+  },
+  "nagpur": {
+    "vegetation_health": 28,
+    "green_cover_pct": 13,
+    "ndvi": 0.29,
+    "tree_density_index": 24
+  },
+  "patna": {
+    "vegetation_health": 38,
+    "green_cover_pct": 24,
+    "ndvi": 0.35,
+    "tree_density_index": 42
+  },
+  "bhopal": {
+    "vegetation_health": 52,
+    "green_cover_pct": 25,
+    "ndvi": 0.47,
+    "tree_density_index": 59
+  },
+  "visakhapatnam": {
+    "vegetation_health": 46,
+    "green_cover_pct": 27,
+    "ndvi": 0.45,
+    "tree_density_index": 48
+  },
+  "guwahati": {
+    "vegetation_health": 72,
+    "green_cover_pct": 31,
+    "ndvi": 0.68,
+    "tree_density_index": 67
+  },
+  "vijayawada": {
+    "vegetation_health": 44,
+    "green_cover_pct": 22,
+    "ndvi": 0.44,
+    "tree_density_index": 47
+  },
+  "coimbatore": {
+    "vegetation_health": 75,
+    "green_cover_pct": 38,
+    "ndvi": 0.63,
+    "tree_density_index": 80
+  }
+}
