@@ -19,7 +19,7 @@ import ServerWakingNotice from '../components/ServerWakingNotice';
 import ValidationBadge from '../components/ValidationBadge';
 import './MapView.css';
 
-// Reliable MapLibre Raster Styles (OSM, Carto Dark, Esri Satellite)
+// Reliable MapLibre Raster Styles (OSM Standard Tiles & Esri World Imagery)
 const OSM_STYLE = {
   version: 8,
   sources: {
@@ -29,7 +29,8 @@ const OSM_STYLE = {
         'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
       ],
       tileSize: 256,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxzoom: 19
     }
   },
   layers: [
@@ -37,31 +38,6 @@ const OSM_STYLE = {
       id: 'osm-tiles-layer',
       type: 'raster',
       source: 'osm-tiles',
-      minzoom: 0,
-      maxzoom: 19
-    }
-  ]
-};
-
-const OSM_DARK_STYLE = {
-  version: 8,
-  sources: {
-    'carto-dark-tiles': {
-      type: 'raster',
-      tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-      ],
-      tileSize: 256,
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
-    }
-  },
-  layers: [
-    {
-      id: 'carto-dark-tiles-layer',
-      type: 'raster',
-      source: 'carto-dark-tiles',
       minzoom: 0,
       maxzoom: 19
     }
@@ -77,7 +53,8 @@ const SATELLITE_STYLE = {
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
       ],
       tileSize: 256,
-      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and GIS User Community'
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and GIS User Community',
+      maxzoom: 19
     }
   },
   layers: [
@@ -199,16 +176,28 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
     return () => { cancelled = true; };
   }, [city]);
 
-  // Initial camera view focused on India map overview
+  // Selected city center coordinates
+  const selectedCenter = useMemo(() => {
+    if (cityInfo?.center && cityInfo.center.length === 2) {
+      return cityInfo.center;
+    }
+    const found = cities.find(c => c.id === city);
+    if (found?.center && found.center.length === 2) {
+      return found.center;
+    }
+    return [77.20, 28.61];
+  }, [cityInfo, cities, city]);
+
+  // Initial camera view centered on the active city
   const initialViewState = useMemo(() => {
     return {
-      longitude: 78.9629,
-      latitude: 22.5937,
-      zoom: 4.6,
+      longitude: selectedCenter[0],
+      latitude: selectedCenter[1],
+      zoom: 11,
       pitch: 0,
       bearing: 0
     };
-  }, []);
+  }, [selectedCenter]);
 
   // Cities list for overview markers & search
   const citiesList = useMemo(() => {
@@ -305,11 +294,10 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
     return list;
   }, [citiesList, activeMode, city, theme, onSelectCity]);
 
-  // Basemap style selection
+  // Basemap style selection (Default: OpenStreetMap standard tiles, Satellite: Esri World Imagery)
   const activeMapStyle = useMemo(() => {
-    if (mapType === 'satellite') return SATELLITE_STYLE;
-    return theme === 'dark' ? OSM_DARK_STYLE : OSM_STYLE;
-  }, [mapType, theme]);
+    return mapType === 'satellite' ? SATELLITE_STYLE : OSM_STYLE;
+  }, [mapType]);
 
   // Live Ticker text
   const tickerText = useMemo(() => {
@@ -443,7 +431,7 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
         )}
 
         <DeckGL
-          key={`heat-map-india-${mapType}-${theme}`}
+          key={`heat-map-${city}`}
           initialViewState={initialViewState}
           controller={true}
           layers={layers}
@@ -509,6 +497,7 @@ Green Health: ${v}/100`;
         )}
 
         {/* Water Overview KPIs */}
+        {/* Water Overview KPIs */}
         {activeMode === 'water' && envData && (
           <div className="kpi-grid">
             <div className="kpi-card">
@@ -520,8 +509,8 @@ Green Health: ${v}/100`;
               <span className="kpi-value">{envData.water.surface_water_pct}%</span>
             </div>
             <div className="kpi-card">
-              <span className="kpi-label">Nearest Water Body</span>
-              <span className="kpi-value">{envData.water.proximity_km} km</span>
+              <span className="kpi-label">Mean NDWI</span>
+              <span className="kpi-value info">{envData.water.mean_ndwi != null ? envData.water.mean_ndwi : '—'}</span>
             </div>
             <div className="kpi-card">
               <span className="kpi-label">Water Stress</span>
@@ -543,11 +532,11 @@ Green Health: ${v}/100`;
             </div>
             <div className="kpi-card">
               <span className="kpi-label">Mean NDVI</span>
-              <span className="kpi-value">{envData.vegetation.ndvi}</span>
+              <span className="kpi-value">{envData.vegetation.ndvi != null ? envData.vegetation.ndvi : '—'}</span>
             </div>
             <div className="kpi-card">
-              <span className="kpi-label">Tree Density</span>
-              <span className="kpi-value success">{envData.vegetation.tree_density_index}/100</span>
+              <span className="kpi-label">Tree Canopy</span>
+              <span className="kpi-value success">{envData.vegetation.tree_density_index}%</span>
             </div>
           </div>
         )}
@@ -593,12 +582,16 @@ Green Health: ${v}/100`;
         {activeMode === 'heat' && <ValidationBadge validation={validation} />}
         {activeMode === 'water' && (
           <div className="data-note">
-            💧 Illustrative hydrology dataset (mock values adapted for 20 cities)
+            💧 <strong>PostgreSQL / PostGIS Sentinel-2 NDWI</strong>
+            {envData?.water?.valid_pixels ? ` · ${envData.water.valid_pixels.toLocaleString()} pixels` : ''}
+            {envData?.status === 'partial_data' && ' · Partial Coverage'}
           </div>
         )}
         {activeMode === 'vegetation' && (
           <div className="data-note">
-            🌳 Illustrative vegetation dataset (mock values adapted for 20 cities)
+            🌳 <strong>PostgreSQL / PostGIS Sentinel-2 NDVI & ESA Land Cover</strong>
+            {envData?.vegetation?.valid_pixels ? ` · ${envData.vegetation.valid_pixels.toLocaleString()} pixels` : ''}
+            {envData?.status === 'partial_data' && ' · Partial Coverage'}
           </div>
         )}
       </div>
