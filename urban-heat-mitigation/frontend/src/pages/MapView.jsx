@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import DeckGL from '@deck.gl/react';
 import { ScatterplotLayer, TextLayer } from '@deck.gl/layers';
 import Map from 'react-map-gl/maplibre';
@@ -83,11 +83,14 @@ function getVegIndexColor(index) {
   return [220, 252, 231];                 // #dcfce7 Sparse
 }
 
-function getHeatScoreColor(score) {
-  if (score >= 80) return [192, 39, 31];
-  if (score >= 62) return [240, 85, 90];
-  if (score >= 46) return [240, 128, 58];
-  if (score >= 30) return [245, 165, 66];
+// Color function for Live Air Temperature Heat Mode
+// Extreme: >= 40°C, High: 35–39.9°C, Warm: 30–34.9°C, Mild: 25–29.9°C, Cool: < 25°C
+function getHeatScoreColor(temp) {
+  if (temp == null) return [148, 163, 184];
+  if (temp >= 40) return [192, 39, 31];
+  if (temp >= 35) return [240, 85, 90];
+  if (temp >= 30) return [240, 128, 58];
+  if (temp >= 25) return [245, 165, 66];
   return [245, 210, 100];
 }
 
@@ -105,7 +108,8 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Data states
-  const [overview, setOverview] = useState(null);
+  const [weatherData, setWeatherData] = useState(null);
+  const [allWeatherData, setAllWeatherData] = useState(null);
   const [envData, setEnvData] = useState(null);
   const [allEnvData, setAllEnvData] = useState(null);
   const [validation, setValidation] = useState(null);
@@ -113,23 +117,36 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
   // Loading & Error states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [weatherRefreshKey, setWeatherRefreshKey] = useState(0);
+  const [manualRefreshKey, setManualRefreshKey] = useState(0);
+
+  const handleRefresh = useCallback(() => {
+    setWeatherRefreshKey(k => k + 1);
+    setManualRefreshKey(k => k + 1);
+  }, []);
+
+  // Periodic weather auto-refresh every 5 minutes (300,000 ms) — ONLY updates weather, never queries DB
+  useEffect(() => {
+    const WEATHER_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+    const timer = setInterval(() => {
+      setWeatherRefreshKey(k => k + 1);
+    }, WEATHER_REFRESH_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   // Modal state
   const [showLstInfo, setShowLstInfo] = useState(false);
 
-  // Fetch data for selected city & India overview
+  // 1. Database Environmental Metrics (Vegetation & Water from PostgreSQL/PostGIS)
+  // Runs ONLY when selected city changes or manual retry is clicked — NEVER on 5-min weather ticks
   useEffect(() => {
     if (!city) return;
 
     let cancelled = false;
 
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-
+    const loadEnvData = async () => {
       try {
-        const [overviewRes, envRes, allEnvRes, valRes] = await Promise.all([
-          fetch(`${API_BASE}/api/v1/overview?city=${city}`).catch(() => null),
+        const [envRes, allEnvRes, valRes] = await Promise.all([
           fetch(`${API_BASE}/api/v1/environment?city=${city}`).catch(() => null),
           fetch(`${API_BASE}/api/v1/environment/all`).catch(() => null),
           fetch(`${API_BASE}/api/v1/validation?city=${city}`).catch(() => null),
@@ -137,44 +154,87 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
 
         if (cancelled) return;
 
-        if (overviewRes && overviewRes.ok) {
-          const data = await overviewRes.json();
-          setOverview(data);
-        }
-
         if (envRes && envRes.ok) {
           const data = await envRes.json();
-          setEnvData(data);
+          if (!cancelled && data.city_id === city) {
+            setEnvData(data);
+          }
         }
 
         if (allEnvRes && allEnvRes.ok) {
           const data = await allEnvRes.json();
-          setAllEnvData(data.cities || {});
+          if (!cancelled) {
+            setAllEnvData(data.cities || {});
+          }
         }
 
         if (valRes && valRes.ok) {
           const data = await valRes.json();
-          setValidation(data);
-        } else {
+          if (!cancelled) {
+            setValidation(data);
+          }
+        } else if (!cancelled) {
           setValidation(null);
-        }
-
-        if (!overviewRes?.ok) {
-          setError('Could not load Heat Map data for this city.');
         }
       } catch (err) {
         if (!cancelled) {
-          console.error('Failed to load Heat Map data:', err);
-          setError('Could not connect to backend server.');
+          console.error('Failed to load database environmental data:', err);
+        }
+      }
+    };
+
+    loadEnvData();
+    return () => { cancelled = true; };
+  }, [city, manualRefreshKey]);
+
+  // 2. Live Weather API (Temperature & Humidity from Open-Meteo)
+  // Updates when city changes or on 5-minute background tick — NEVER overwrites vegetation/water
+  useEffect(() => {
+    if (!city) return;
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    const loadWeatherData = async () => {
+      try {
+        const [weatherRes, allWeatherRes] = await Promise.all([
+          fetch(`${API_BASE}/api/v1/weather?city=${city}`).catch(() => null),
+          fetch(`${API_BASE}/api/v1/weather/all`).catch(() => null),
+        ]);
+
+        if (cancelled) return;
+
+        if (weatherRes && weatherRes.ok) {
+          const data = await weatherRes.json();
+          if (!cancelled && data.city_id === city) {
+            setWeatherData(data);
+          }
+        } else if (!cancelled && activeMode === 'heat') {
+          setError('Could not load live weather data for this city.');
+        }
+
+        if (allWeatherRes && allWeatherRes.ok) {
+          const data = await allWeatherRes.json();
+          if (!cancelled) {
+            setAllWeatherData(data.cities || {});
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to load live weather data:', err);
+          if (activeMode === 'heat') {
+            setError('Could not connect to live weather service.');
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
 
-    fetchData();
+    loadWeatherData();
     return () => { cancelled = true; };
-  }, [city]);
+  }, [city, weatherRefreshKey, activeMode]);
 
   // Selected city center coordinates
   const selectedCenter = useMemo(() => {
@@ -199,23 +259,24 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
     };
   }, [selectedCenter]);
 
-  // Cities list for overview markers & search
+  // Cities list for overview markers & search (combining live weather with environmental indicators)
   const citiesList = useMemo(() => {
-    if (allEnvData) {
-      return Object.values(allEnvData);
-    }
-    return cities.map(c => ({
-      id: c.id,
-      name: c.name,
-      state: c.state,
-      country: c.country,
-      lat: c.center ? c.center[1] : 28.61,
-      lon: c.center ? c.center[0] : 77.20,
-      heat_score: 65,
-      water: { availability_index: 50 },
-      vegetation: { vegetation_health: 50 },
-    }));
-  }, [allEnvData, cities]);
+    return cities.map(c => {
+      const env = allEnvData ? allEnvData[c.id] : null;
+      const weather = allWeatherData ? allWeatherData[c.id] : null;
+      return {
+        id: c.id,
+        name: c.name,
+        state: c.state,
+        country: c.country,
+        lat: c.center ? c.center[1] : 28.61,
+        lon: c.center ? c.center[0] : 77.20,
+        weather: weather || null,
+        water: env?.water || null,
+        vegetation: env?.vegetation || null,
+      };
+    });
+  }, [allEnvData, allWeatherData, cities]);
 
   // Filtered search results
   const filteredCities = useMemo(() => {
@@ -254,8 +315,8 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
               const v = d.vegetation?.vegetation_health ?? 50;
               return getVegIndexColor(v);
             } else {
-              const s = d.heat_score ?? 65;
-              return getHeatScoreColor(s);
+              const temp = d.weather?.current_temp_c;
+              return getHeatScoreColor(temp);
             }
           },
           getLineColor: d => (d.id === city ? [255, 255, 255, 255] : [15, 23, 42, 200]),
@@ -311,8 +372,11 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
         const val = c.vegetation?.vegetation_health;
         return val != null ? `${c.name} · Green Health: ${val}/100` : null;
       } else {
-        const temp = c.air_temp_baseline;
-        return temp ? `${c.name} · ${temp}°C` : `${c.name} · Score ${c.heat_score}`;
+        const temp = c.weather?.current_temp_c;
+        const hum = c.weather?.humidity_pct;
+        return temp != null
+          ? `${c.name} · ${temp}°C${hum != null ? ` (${hum}% RH)` : ''}`
+          : null;
       }
     }).filter(Boolean);
 
@@ -420,13 +484,13 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
       <div className="map-wrapper">
         {loading && (
           <div className="loading-overlay">
-            <ServerWakingNotice compact />
+            <ServerWakingNotice compact onRetry={handleRefresh} />
           </div>
         )}
 
         {!loading && error && (
           <div className="loading-overlay">
-            <p>{error}</p>
+            <ServerWakingNotice compact error={error} onRetry={handleRefresh} />
           </div>
         )}
 
@@ -437,12 +501,33 @@ export default function MapView({ city, cityInfo, onSelectCity, cities = [] }) {
           layers={layers}
           getTooltip={({ object }) => {
             if (!object) return null;
-            const w = object.water?.availability_index ?? '—';
-            const v = object.vegetation?.vegetation_health ?? '—';
-            return `${object.name}, ${object.state}
-Air Temp Baseline: ${object.air_temp_baseline}°C
+            if (activeMode === 'heat') {
+              const w = object.weather;
+              const currTemp = w?.current_temp_c != null ? `${w.current_temp_c}°C` : 'Unavailable';
+              const maxTemp = w?.today_max_c != null ? `${w.today_max_c}°C` : '—';
+              const minTemp = w?.today_min_c != null ? `${w.today_min_c}°C` : '—';
+              const hum = w?.humidity_pct != null ? `${w.humidity_pct}%` : '—';
+              const cond = w?.weather_description || '—';
+              const obs = w?.observation_time ? w.observation_time.replace('T', ' ') : '—';
+              return `${object.name}, ${object.state}
+Current Air Temp: ${currTemp} (${cond})
+Today's Forecast High: ${maxTemp}
+Today's Forecast Low: ${minTemp}
+Relative Humidity: ${hum}
+Model Timestep: ${obs} IST`;
+            } else if (activeMode === 'vegetation') {
+              const v = object.vegetation?.vegetation_health ?? '—';
+              const g = object.vegetation?.green_cover_pct != null ? `${object.vegetation.green_cover_pct}%` : '—';
+              return `${object.name}, ${object.state}
+Green Health: ${v}/100
+Green Cover: ${g}`;
+            } else {
+              const w = object.water?.availability_index ?? '—';
+              const sw = object.water?.surface_water_pct != null ? `${object.water.surface_water_pct}%` : '—';
+              return `${object.name}, ${object.state}
 Water Index: ${w}/100
-Green Health: ${v}/100`;
+Surface Water: ${sw}`;
+            }
           }}
         >
           <Map mapStyle={activeMapStyle} />
@@ -466,32 +551,44 @@ Green Health: ${v}/100`;
               )}
             </h3>
             <span className="mode-tag">
-              {activeMode === 'heat' && '🔥 Heat Intensity'}
+              {activeMode === 'heat' && '🔥 Live Weather & Air Temp'}
               {activeMode === 'vegetation' && '🌳 Vegetation Health'}
               {activeMode === 'water' && '💧 Water Availability'}
             </span>
           </div>
-          <span className="badge">{cityInfo?.season_label || 'Apr–Jun 2026'}</span>
+          <span className="badge" title="Numerical Weather Prediction (NWP) model timestep">
+            {activeMode === 'heat'
+              ? (weatherData?.observation_time ? `Model ${weatherData.observation_time.split('T')[1] || weatherData.observation_time}` : 'Live Weather')
+              : (cityInfo?.season_label || 'Apr–Jun 2026')}
+          </span>
         </div>
 
-        {/* Heat Overview KPIs */}
-        {activeMode === 'heat' && overview && (
+        {/* Heat Overview KPIs: Live Weather Air Temperature */}
+        {activeMode === 'heat' && (
           <div className="kpi-grid">
-            <div className="kpi-card">
-              <span className="kpi-label">Mean LST</span>
-              <span className="kpi-value">{overview.mean_lst_c.toFixed(1)}°C</span>
+            <div className="kpi-card" title="Air temperature at 2m from Open-Meteo NWP assimilation">
+              <span className="kpi-label">Current Air Temp</span>
+              <span className="kpi-value">
+                {weatherData?.current_temp_c != null ? `${weatherData.current_temp_c.toFixed(1)}°C` : '—'}
+              </span>
             </div>
-            <div className="kpi-card">
-              <span className="kpi-label">Max LST</span>
-              <span className="kpi-value danger">{overview.max_lst_c.toFixed(1)}°C</span>
+            <div className="kpi-card" title="Today's maximum forecast temperature (Asia/Kolkata)">
+              <span className="kpi-label">Today's Forecast High</span>
+              <span className="kpi-value danger">
+                {weatherData?.today_max_c != null ? `${weatherData.today_max_c.toFixed(1)}°C` : '—'}
+              </span>
             </div>
-            <div className="kpi-card">
-              <span className="kpi-label">Hotspot Area</span>
-              <span className="kpi-value warning">{overview.hotspot_area_km2.toFixed(1)} km²</span>
+            <div className="kpi-card" title="Today's minimum forecast temperature (Asia/Kolkata)">
+              <span className="kpi-label">Today's Forecast Low</span>
+              <span className="kpi-value">
+                {weatherData?.today_min_c != null ? `${weatherData.today_min_c.toFixed(1)}°C` : '—'}
+              </span>
             </div>
-            <div className="kpi-card">
-              <span className="kpi-label">UHI Intensity</span>
-              <span className="kpi-value">+{overview.uhi_intensity_c.toFixed(1)}°C</span>
+            <div className="kpi-card" title="Current relative humidity">
+              <span className="kpi-label">Relative Humidity</span>
+              <span className="kpi-value warning">
+                {weatherData?.humidity_pct != null ? `${weatherData.humidity_pct}%` : '—'}
+              </span>
             </div>
           </div>
         )}
@@ -544,18 +641,18 @@ Green Health: ${v}/100`;
         {/* Dynamic Legend */}
         <div className="legend">
           <h4>
-            {activeMode === 'heat' && 'Heat Intensity Scale'}
+            {activeMode === 'heat' && 'Air Temperature Scale'}
             {activeMode === 'vegetation' && 'Vegetation Health Scale'}
             {activeMode === 'water' && 'Water Availability Scale'}
           </h4>
 
           {activeMode === 'heat' && (
             <div className="legend-items">
-              <div className="legend-item"><span className="color-box" style={{ background: '#c0271f' }}></span> 80+ · Extreme</div>
-              <div className="legend-item"><span className="color-box" style={{ background: '#f0555a' }}></span> 62–79 · High</div>
-              <div className="legend-item"><span className="color-box" style={{ background: '#f0803a' }}></span> 46–61 · Moderate</div>
-              <div className="legend-item"><span className="color-box" style={{ background: '#f5a542' }}></span> 30–45 · Warm</div>
-              <div className="legend-item"><span className="color-box" style={{ background: '#f5d264' }}></span> &lt;30 · Milder</div>
+              <div className="legend-item"><span className="color-box" style={{ background: '#c0271f' }}></span> 40°C+ · Extreme</div>
+              <div className="legend-item"><span className="color-box" style={{ background: '#f0555a' }}></span> 35–39°C · High</div>
+              <div className="legend-item"><span className="color-box" style={{ background: '#f0803a' }}></span> 30–34°C · Warm</div>
+              <div className="legend-item"><span className="color-box" style={{ background: '#f5a542' }}></span> 25–29°C · Mild</div>
+              <div className="legend-item"><span className="color-box" style={{ background: '#f5d264' }}></span> &lt;25°C · Cool</div>
             </div>
           )}
 
@@ -578,8 +675,14 @@ Green Health: ${v}/100`;
           )}
         </div>
 
-        {/* Dataset Note / Validation Badge */}
-        {activeMode === 'heat' && <ValidationBadge validation={validation} />}
+        {/* Dataset Note / Attribution */}
+        {activeMode === 'heat' && (
+          <div className="data-note">
+            🔥 <strong>Open-Meteo Live Weather API</strong> (NWP Blend)
+            {weatherData?.observation_time ? ` · Timestep: ${weatherData.observation_time.replace('T', ' ')} IST` : ''}
+            {weatherData?.is_stale && ' · Cached Observation'}
+          </div>
+        )}
         {activeMode === 'water' && (
           <div className="data-note">
             💧 <strong>PostgreSQL / PostGIS Sentinel-2 NDWI</strong>

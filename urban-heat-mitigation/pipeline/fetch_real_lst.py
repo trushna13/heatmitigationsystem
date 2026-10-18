@@ -84,6 +84,31 @@ class FetchError(Exception):
     pass
 
 
+def calibrate_lst(raw_dn: np.ndarray, nodata: float | None = None) -> np.ndarray:
+    """
+    Calibrate Landsat Collection 2 Level-2 thermal digital numbers (DN) to Celsius.
+
+    Formula:
+        LST_K = DN * LANDSAT_SCALE_FACTOR (0.00341802) + LANDSAT_OFFSET (149.0)
+        LST_C = LST_K - 273.15
+
+    Preserves nodata values (setting them to np.nan) and masks non-finite or
+    physically implausible values outside [-20, 70] °C.
+    """
+    if raw_dn.size == 0:
+        return np.empty(raw_dn.shape, dtype=np.float32)
+
+    dn = raw_dn.astype(np.float32)
+    if nodata is not None:
+        dn[raw_dn == nodata] = np.nan
+    dn[raw_dn == 0] = np.nan  # Landsat C2 L2 standard fill/nodata value
+
+    lst_kelvin = dn * LANDSAT_SCALE_FACTOR + LANDSAT_OFFSET
+    lst_celsius = lst_kelvin - 273.15
+    lst_celsius[(lst_celsius < -20) | (lst_celsius > 70) | ~np.isfinite(lst_celsius)] = np.nan
+    return lst_celsius
+
+
 def fetch_real_lst(city_id: str = "new_delhi", cloud_cover_max: int = 30):
     try:
         import pystac_client
@@ -133,13 +158,26 @@ def fetch_real_lst(city_id: str = "new_delhi", cloud_cover_max: int = 30):
     with rasterio.open(asset.href) as src:
         west, south, east, north = transform_bounds("EPSG:4326", src.crs, *bbox_list)
         window = from_bounds(west, south, east, north, transform=src.transform)
-        dn = src.read(1, window=window).astype(np.float32)
+        raw_dn = src.read(1, window=window)
+        src_nodata = src.nodata
         win_transform = src.window_transform(window)
         raster_crs = src.crs
 
-    if dn.size == 0:
+    if raw_dn.size == 0 or raw_dn.shape[0] == 0 or raw_dn.shape[1] == 0:
         print("Windowed read returned no data — bbox may not be covered by this scene.")
         raise FetchError(f"empty window read for '{city_id}'")
+
+    # Official USGS calibration: DN -> Kelvin -> Celsius
+    lst_celsius = calibrate_lst(raw_dn, nodata=src_nodata)
+
+    valid_count = int(np.sum(np.isfinite(lst_celsius)))
+    if valid_count == 0:
+        print("No valid surface temperature pixels found in windowed scene.")
+        raise FetchError(f"no valid LST pixels for '{city_id}'")
+
+    valid_pct = 100.0 * valid_count / lst_celsius.size
+    print(f"  Real LST range : {np.nanmin(lst_celsius):.1f}°C to {np.nanmax(lst_celsius):.1f}°C "
+          f"({valid_pct:.0f}% valid pixels)")
 
     # --- Sanity check: confirm the windowed array is actually aligned with
     # geography the way we expect, before trusting any zonal stats from it.
@@ -153,7 +191,7 @@ def fetch_real_lst(city_id: str = "new_delhi", cloud_cover_max: int = 30):
     center_lon, center_lat = city["center"]
     cx, cy = to_raster_crs.transform(center_lon, center_lat)
     win_west, win_south, win_east, win_north = rasterio.transform.array_bounds(
-        dn.shape[0], dn.shape[1], win_transform
+        lst_celsius.shape[0], lst_celsius.shape[1], win_transform
     )
     print(f"\n  [diagnostic] Window bounds (raster CRS): "
           f"({win_west:.0f}, {win_south:.0f}) to ({win_east:.0f}, {win_north:.0f})")
@@ -161,24 +199,19 @@ def fetch_real_lst(city_id: str = "new_delhi", cloud_cover_max: int = 30):
 
     if win_west <= cx <= win_east and win_south <= cy <= win_north:
         r, c = _rowcol(win_transform, cx, cy)
-        if 0 <= r < dn.shape[0] and 0 <= c < dn.shape[1]:
+        if 0 <= r < lst_celsius.shape[0] and 0 <= c < lst_celsius.shape[1]:
             center_val = lst_celsius[r, c]
-            print(f"  [diagnostic] LST directly under city center (row={r}, col={c}): "
-                  f"{center_val:.1f}°C")
+            if np.isnan(center_val):
+                print(f"  [diagnostic] LST directly under city center (row={r}, col={c}): "
+                      f"No data / masked (cloud or fill)")
+            else:
+                print(f"  [diagnostic] LST directly under city center (row={r}, col={c}): "
+                      f"{center_val:.1f}°C")
         else:
             print("  [diagnostic] City center falls outside the windowed array bounds (unexpected).")
     else:
         print("  [diagnostic] City center falls outside the computed window — check bbox/CRS handling.")
     print()
-
-    # Official USGS calibration: DN -> Kelvin -> Celsius
-    lst_kelvin = dn * LANDSAT_SCALE_FACTOR + LANDSAT_OFFSET
-    lst_celsius = lst_kelvin - 273.15
-    lst_celsius[(lst_celsius < -20) | (lst_celsius > 70)] = np.nan  # mask obvious bad pixels
-
-    valid_pct = 100 * np.sum(~np.isnan(lst_celsius)) / lst_celsius.size
-    print(f"  Real LST range : {np.nanmin(lst_celsius):.1f}°C to {np.nanmax(lst_celsius):.1f}°C "
-          f"({valid_pct:.0f}% valid pixels)")
 
     # Zonal mean per grid cell, using this city's existing grid
     grid = gpd.read_file(grid_path)
@@ -205,9 +238,13 @@ def fetch_real_lst(city_id: str = "new_delhi", cloud_cover_max: int = 30):
         containing = grid[grid.geometry.contains(center_point)]
         if len(containing) > 0:
             cell_val = containing.iloc[0]["lst_satellite_c"]
-            print(f"  [diagnostic] Zonal-stats value for the cell at city center: "
-                  f"{cell_val:.1f}°C  (compare to the direct pixel sample above — "
-                  f"should be within ~1-2°C of each other)\n")
+            if pd.notna(cell_val):
+                print(f"  [diagnostic] Zonal-stats value for the cell at city center: "
+                      f"{cell_val:.1f}°C  (compare to the direct pixel sample above — "
+                      f"should be within ~1-2°C of each other)\n")
+            else:
+                print("  [diagnostic] Zonal-stats value for the cell at city center: "
+                      "NaN / no coverage\n")
     except Exception as diag_err:
         print(f"  [diagnostic] Cross-check skipped: {diag_err}\n")
 

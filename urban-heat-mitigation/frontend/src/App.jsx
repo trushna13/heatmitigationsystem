@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { Map, Flame, BarChart2, Layers, ChevronDown, Sun, Moon, Info, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Map, Flame, BarChart2, Layers, ArrowLeftRight, ChevronDown, Sun, Moon, Info, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import './App.css';
 import { API_BASE } from './api';
 import { useTheme } from './ThemeContext';
@@ -11,6 +11,7 @@ import MapView from './pages/MapView';
 import HeatGridView from './pages/HeatGridView';
 import DriversView from './pages/DriversView';
 import ScenarioView from './pages/ScenarioView';
+import CityComparison from './pages/CityComparison';
 
 function App() {
   const { theme, toggleTheme } = useTheme();
@@ -60,8 +61,7 @@ function App() {
         <div className="sidebar-header">
           <div className="logo-icon">🔥</div>
           <div className="logo-text">
-            <h2>Urban Heat</h2>
-            <p>Urban Heat Island Tracker</p>
+            <h2>HeatShield</h2>
           </div>
           <button
             className="sidebar-collapse-btn"
@@ -113,6 +113,11 @@ function App() {
             <Layers size={20} />
             <span>Scenarios</span>
           </NavLink>
+
+          <NavLink to="/compare" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+            <ArrowLeftRight size={20} />
+            <span>City Comparison</span>
+          </NavLink>
         </nav>
 
         <div className="sidebar-footer">
@@ -159,6 +164,7 @@ function App() {
             <Route path="/grid" element={<HeatGridView key={selectedCity} city={selectedCity} cityInfo={activeCity} />} />
             <Route path="/drivers" element={<DriversView key={selectedCity} city={selectedCity} cityInfo={activeCity} />} />
             <Route path="/scenarios" element={<ScenarioView key={selectedCity} city={selectedCity} cityInfo={activeCity} />} />
+            <Route path="/compare" element={<CityComparison cities={cities} onSelectCity={setSelectedCity} />} />
           </Routes>
         )}
 

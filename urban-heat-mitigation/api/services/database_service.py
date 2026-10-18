@@ -14,6 +14,8 @@ from psycopg2 import pool
 
 logger = logging.getLogger("heatshield.database")
 
+from pipeline.config import CITIES
+
 # ─── Database Configuration ──────────────────────────────────────
 # Read from environment variables with sensible local defaults.
 # Never expose credentials in logs.
@@ -522,6 +524,7 @@ def get_city_environment_metrics(city_id: str) -> Dict[str, Any]:
             "min_lst_c": round(lst_stats["min"], 1) if lst_stats and lst_stats["min"] is not None else None,
             "max_lst_c": round(lst_stats["max"], 1) if lst_stats and lst_stats["max"] is not None else None,
             "valid_pixels": lst_stats["valid_pixels"] if lst_stats else 0,
+            "observation_period": CITIES.get(city_id, {}).get("season_label") if city_id in CITIES else None,
             "unit": "°C",
             "is_mock": False,
         },
@@ -551,9 +554,9 @@ def get_all_environment_metrics() -> Dict[str, Any]:
         metrics = get_city_environment_metrics(city_id)
         lon, lat = city_meta["center"]
 
-        # Real LST baseline from PostGIS, or city meta fallback if absent
-        air_temp = metrics["heat"]["mean_lst_c"] if metrics["heat"] and metrics["heat"]["mean_lst_c"] is not None else city_meta.get("air_temp_baseline", 38.0)
-        heat_score = min(100, max(0, int((air_temp - 25.0) * 4)))
+        mean_lst = metrics["heat"]["mean_lst_c"] if metrics["heat"] and metrics["heat"]["mean_lst_c"] is not None else None
+        heat_score = min(100, max(0, int((mean_lst - 25.0) * 4))) if mean_lst is not None else None
+        air_temp = city_meta.get("air_temp_baseline", 38.0)
 
         result[city_id] = {
             "id": city_id,
@@ -563,6 +566,7 @@ def get_all_environment_metrics() -> Dict[str, Any]:
             "lat": lat,
             "lon": lon,
             "air_temp_baseline": air_temp,
+            "mean_lst_c": mean_lst,
             "heat_score": heat_score,
             "water": metrics["water"],
             "vegetation": metrics["vegetation"],

@@ -8,7 +8,7 @@ import pandas as pd
 
 from pipeline.config import CITIES, DEFAULT_CITY, list_cities, city_features_file, PROCESSED_DIR
 from api.deps import get_city_id
-from api.routers import grid, hotspots, drivers, scenarios, environment
+from api.routers import grid, hotspots, drivers, scenarios, environment, weather, comparison
 from api.schemas import OverviewResponse
 import json
 
@@ -36,6 +36,8 @@ app.include_router(hotspots.router)
 app.include_router(drivers.router)
 app.include_router(scenarios.router)
 app.include_router(environment.router)
+app.include_router(weather.router)
+app.include_router(comparison.router)
 
 
 @app.get("/api/v1/cities", tags=["overview"])
